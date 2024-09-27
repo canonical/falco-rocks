@@ -30,8 +30,13 @@ def _get_falco_helm_cmd(image_version: str):
         "falco", image_version, "amd64"
     )
 
+    falcoctl_rock = env_util.get_build_meta_info_for_rock_version(
+        "falcoctl", "0.9.0", "amd64"
+    )
+
     images = [
         k8s_util.HelmImage(falco_rock.image),
+        k8s_util.HelmImage(falcoctl_rock.image, "falcoctl"),
     ]
 
     return k8s_util.get_helm_install_command(
