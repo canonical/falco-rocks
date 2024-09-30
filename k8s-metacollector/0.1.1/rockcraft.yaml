@@ -1,0 +1,55 @@
+# Copyright 2024 Canonical, Ltd.
+# See LICENSE file for licensing details
+
+# Based on: https://github.com/falcosecurity/k8s-metacollector/blob/v0.1.1/build/Dockerfile
+name: k8s-metacollector
+summary: k8s-metacollector rock
+description: |
+    A rock containing k8s-metacollector for Falco.
+
+    The k8s-metacollector is a self-contained module that can be deployed within a
+    Kubernetes cluster to perform the task of gathering metadata from various
+    Kubernetes resources and subsequently transmitting this collected metadata to
+    designated subscribers.
+license: Apache-2.0
+version: 0.1.1
+
+base: bare
+build-base: ubuntu@24.04
+run-user: _daemon_
+
+platforms:
+  amd64:
+  arm64:
+
+environment:
+  APP_VERSION: 0.1.1
+
+# Services to be loaded by the Pebble entrypoint.
+services:
+  k8s-metacollector:
+    summary: "k8s-metacollector service"
+    override: replace
+    startup: enabled
+    command: "/meta-collector"
+    on-success: shutdown
+    on-failure: shutdown
+
+parts:
+  build-k8s-metacollector:
+    plugin: nil
+    source: https://github.com/falcosecurity/k8s-metacollector
+    source-type: git
+    source-tag: v${CRAFT_PROJECT_VERSION}
+    source-depth: 1
+    build-snaps:
+      - go/1.21/stable
+    build-environment:
+      - CGO_ENABLED: 0
+      - GOOS: linux
+      - GOARCH: $CRAFT_ARCH_BUILD_FOR
+      - VERSION: $CRAFT_PROJECT_VERSION
+      - PROJECT: github.com/falcosecurity/k8s-metacollector
+      - LDFLAGS: -X $PROJECT/pkg/version.semVersion=$VERSION -X $PROJECT/pkg/version.buildDate="\"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\"" -s -w
+    override-build: |
+      go build -ldflags "${LDFLAGS}" -o ${CRAFT_PART_INSTALL}/meta-collector main.go
