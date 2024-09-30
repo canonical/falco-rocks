@@ -34,9 +34,18 @@ def _get_falco_helm_cmd(image_version: str):
         "falcoctl", "0.9.0", "amd64"
     )
 
+    driver_loader_rock = env_util.get_build_meta_info_for_rock_version(
+        "falco-driver-loader", image_version, "amd64"
+    )
+
     images = [
         k8s_util.HelmImage(falco_rock.image),
         k8s_util.HelmImage(falcoctl_rock.image, "falcoctl"),
+        k8s_util.HelmImage(driver_loader_rock.image, "driver.loader.initContainer"),
+    ]
+
+    set_configs = [
+        "driver.kind=modern_ebpf",
     ]
 
     return k8s_util.get_helm_install_command(
@@ -45,6 +54,8 @@ def _get_falco_helm_cmd(image_version: str):
         namespace="falco",
         repository="https://falcosecurity.github.io/charts",
         images=images,
+        runAsUser=0,
+        set_configs=set_configs,
         split_image_registry=True,
     )
 

@@ -1,0 +1,13 @@
+diff --git a/docker/driver-loader/docker-entrypoint.sh b/docker/driver-loader/docker-entrypoint.sh
+index 52df15f3..1eea148c 100755
+--- a/docker/driver-loader/docker-entrypoint.sh
++++ b/docker/driver-loader/docker-entrypoint.sh
+@@ -17,6 +17,8 @@
+ # limitations under the License.
+ #
+
++# Pebble doesn't like it when the process ends too suddenly.
++trap "sleep 1.1" EXIT
+
+ print_usage() {
+ 	echo ""
