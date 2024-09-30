@@ -1,0 +1,52 @@
+# Copyright 2024 Canonical, Ltd.
+# See LICENSE file for licensing details
+
+# Based on: https://github.com/falcosecurity/falco-exporter/blob/v0.8.7/build/Dockerfile
+name: falco-exporter
+summary: falco-exporter rock
+description: |
+    A rock containing falco-exporter, Prometheus Metrics Exporter for Falco output events.
+license: Apache-2.0
+version: 0.8.7
+
+base: bare
+build-base: ubuntu@24.04
+
+platforms:
+  amd64:
+  arm64:
+
+environment:
+  APP_VERSION: 0.8.7
+
+# Services to be loaded by the Pebble entrypoint.
+services:
+  falco-exporter:
+    summary: "falco-exporter service"
+    override: replace
+    startup: enabled
+    command: "/usr/bin/falco-exporter [ --help ]"
+    on-success: shutdown
+    on-failure: shutdown
+
+entrypoint-service: falco-exporter
+
+parts:
+  build-falco-exporter:
+    plugin: go
+    source: https://github.com/falcosecurity/falco-exporter
+    source-type: git
+    source-tag: v${CRAFT_PROJECT_VERSION}
+    source-depth: 1
+    build-snaps:
+      - go/1.17/stable
+    build-environment:
+      - CGO_ENABLED: 0
+      - GO111MODULE: "on"
+      - GOOS: linux
+      - GOARCH: $CRAFT_ARCH_BUILD_FOR
+      - VERSION: $CRAFT_PROJECT_VERSION
+    go-generate:
+      - ./cmd/falco-exporter
+    organize:
+      bin/falco-exporter: ./usr/bin/
