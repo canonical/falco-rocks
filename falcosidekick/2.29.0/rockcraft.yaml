@@ -1,0 +1,66 @@
+# Copyright 2024 Canonical, Ltd.
+# See LICENSE file for licensing details
+
+# Based on: https://github.com/falcosecurity/falcosidekick/blob/2.29.0/Dockerfile
+name: falcosidekick
+summary: falcosidekick rock
+description: |
+    A rock containing falcosidekick, a simple daemon for connecting Falco to your ecosystem.
+    It takes a Falco events and forward them to different outputs in a fan-out way.
+license: Apache-2.0
+version: 2.29.0
+
+base: ubuntu@24.04
+build-base: ubuntu@24.04
+
+platforms:
+  amd64:
+  arm64:
+
+environment:
+  APP_VERSION: 2.29.0
+
+# Services to be loaded by the Pebble entrypoint.
+services:
+  falcosidekick:
+    summary: "falcosidekick service"
+    override: replace
+    startup: enabled
+    # falcosidekick user and group is created, and the workdir is set in its home.
+    # https://github.com/falcosecurity/falcosidekick/blob/2.29.0/Dockerfile#L14
+    command: "/home/falcosidekick/app/falcosidekick [ --help ]"
+    on-success: shutdown
+    on-failure: shutdown
+
+entrypoint-service: falcosidekick
+
+parts:
+  # https://github.com/falcosecurity/falcosidekick/blob/2.29.0/Dockerfile#L8
+  falcosidekick-user:
+    plugin: nil
+    overlay-script: |
+      groupadd -R $CRAFT_OVERLAY --system falcosidekick
+      useradd -R $CRAFT_OVERLAY --system -g falcosidekick -u 1234 falcosidekick
+
+  build-falcosidekick:
+    plugin: nil
+    source: https://github.com/falcosecurity/falcosidekick
+    source-type: git
+    source-tag: ${CRAFT_PROJECT_VERSION}
+    source-depth: 1
+    stage-packages:
+      - ca-certificates
+    build-snaps:
+      # Version used by the GitHub action: https://github.com/falcosecurity/falcosidekick/blob/2.29.0/.github/workflows/build-image.yml#L16
+      - go/1.22/stable
+    build-environment:
+      - CGO_ENABLED: 0
+      - GO111MODULE: "on"
+      - GOOS: linux
+      - GOARCH: $CRAFT_ARCH_BUILD_FOR
+      - VERSION: $CRAFT_PROJECT_VERSION
+    override-build: |
+      mkdir -p ${CRAFT_PART_INSTALL}/home/falcosidekick/app/
+      make falcosidekick
+      cp ./falcosidekick ${CRAFT_PART_INSTALL}/home/falcosidekick/app/
+      cp LICENSE ${CRAFT_PART_INSTALL}/home/falcosidekick/app/
