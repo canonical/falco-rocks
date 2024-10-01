@@ -17,7 +17,6 @@ build-base: ubuntu@24.04
 
 platforms:
   amd64:
-  arm64:
 
 environment:
   # https://github.com/falcosecurity/falco/blob/0.38.2/docker/falco/Dockerfile#L12-L16
