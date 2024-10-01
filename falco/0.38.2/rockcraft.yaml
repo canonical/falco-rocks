@@ -90,8 +90,12 @@ parts:
     override-build: |
       # Installing additional packages here because of the $(uname -r) part. We need that for
       # build idempotency, so we can build locally *and* in the CI.
-      # linux-tools and linux-cloud-tools are required for building BPF.
-      apt install linux-headers-$(uname -r) linux-tools-$(uname -r) linux-cloud-tools-$(uname -r)
+      # linux-tools and linux-cloud-tools are required for building BPF (for x86_64).
+      if [ "$(uname -m)" == "x86_64" ]; then
+        apt install -y linux-headers-$(uname -r) linux-tools-$(uname -r) linux-cloud-tools-$(uname -r)
+      else
+        apt install -y linux-headers-$(uname -r) linux-tools-$(uname -r) linux-cloud-tools
+      fi
 
       # https://falco.org/docs/developer-guide/source/
       mkdir -p build
