@@ -6,10 +6,19 @@
 import logging
 import time
 
+import pytest
 from k8s_test_harness import harness
 from k8s_test_harness.util import constants, env_util, k8s_util
 
 LOG = logging.getLogger(__name__)
+
+
+_FALCOCTL_VERSIONS = {
+    # Based on the Falco releases.
+    # falco_version: falcoctl_version
+    "0.38.2": "0.9.0",
+    "0.39.0": "0.10.0",
+}
 
 
 def _get_event_generator_helm_cmd():
@@ -25,13 +34,13 @@ def _get_event_generator_helm_cmd():
     )
 
 
-def _get_falco_helm_cmd(image_version: str):
+def _get_falco_helm_cmd(falco_version: str):
     falco_rock = env_util.get_build_meta_info_for_rock_version(
-        "falco", image_version, "amd64"
+        "falco", falco_version, "amd64"
     )
 
     falcoctl_rock = env_util.get_build_meta_info_for_rock_version(
-        "falcoctl", "0.9.0", "amd64"
+        "falcoctl", _FALCOCTL_VERSIONS[falco_version], "amd64"
     )
 
     driver_loader_rock = env_util.get_build_meta_info_for_rock_version(
@@ -105,9 +114,10 @@ def _assert_falco_logs(instance: harness.Instance):
     assert False, "Expected Falco logs to contain Warnings, based on event-generator"
 
 
-def test_integration_falco(function_instance: harness.Instance):
+@pytest.mark.parametrize("image_version", ["0.38.2", "0.39.0"])
+def test_integration_falco(function_instance: harness.Instance, image_version):
     # Deploy Falco helm chart and wait for it to become active.
-    function_instance.exec(_get_falco_helm_cmd("0.38.2"))
+    function_instance.exec(_get_falco_helm_cmd(image_version))
 
     # Wait for the daemonset to become Active.
     k8s_util.wait_for_daemonset(function_instance, "falco", "falco", retry_times=10)

@@ -19,7 +19,7 @@ ROCK_EXPECTED_FILES = [
 
 
 @pytest.mark.parametrize("rock_name", ["falco", "falco-driver-loader"])
-@pytest.mark.parametrize("image_version", ["0.38.2"])
+@pytest.mark.parametrize("image_version", ["0.38.2", "0.39.0"])
 def test_falco_rock(rock_name, image_version):
     """Test falco rocks."""
     rock = env_util.get_build_meta_info_for_rock_version(

@@ -1,0 +1,67 @@
+# Copyright 2024 Canonical, Ltd.
+# See LICENSE file for licensing details
+
+# Based on: https://github.com/falcosecurity/falcoctl/blob/v0.10.0/build/Dockerfile
+name: falcoctl
+summary: falcoctl rock
+description: |
+    A rock containing falcoctl.
+
+    falcoctl is the official CLI tool for working with Falco and its ecosystem components.
+license: Apache-2.0
+version: 0.10.0
+
+base: ubuntu@24.04
+build-base: ubuntu@24.04
+run-user: _daemon_
+
+platforms:
+  amd64:
+  arm64:
+
+environment:
+  APP_VERSION: 0.10.0
+
+# Services to be loaded by the Pebble entrypoint.
+services:
+  falcoctl:
+    summary: "falcoctl service"
+    override: replace
+    startup: enabled
+    command: "/falcoctl-entrypoint.sh [ --help ]"
+    on-success: shutdown
+    on-failure: shutdown
+
+entrypoint-service: falcoctl
+
+parts:
+  build-falcoctl:
+    plugin: go
+    source: https://github.com/falcosecurity/falcoctl
+    source-type: git
+    source-tag: v${CRAFT_PROJECT_VERSION}
+    source-depth: 1
+    stage-packages:
+      # Required by falcoctl in order to verify certificates.
+      - ca-certificates
+    build-snaps:
+      - go/1.23/stable
+    build-environment:
+      - CGO_ENABLED: 0
+      - GOOS: linux
+      - GOARCH: $CRAFT_ARCH_BUILD_FOR
+      - VERSION: $CRAFT_PROJECT_VERSION
+      - PROJECT: github.com/falcosecurity/falcoctl
+      - LDFLAGS: -X $PROJECT/cmd/version.semVersion=$VERSION -X $PROJECT/cmd/version.buildDate="\"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\"" -s -w
+    override-build: |
+      mkdir -p ${CRAFT_PART_INSTALL}/usr/bin/
+      go mod download
+      go build -o ${CRAFT_PART_INSTALL}/usr/bin/ -ldflags "${LDFLAGS}" .
+
+  add-falcoctl-entrypoint:
+    plugin: nil
+    override-build: |
+      # Running falcoctl directly may finish sooner than 1 second, which means Pebble will just
+      # hang around and not finish, which is undesirable for an init container.
+      # We're setting this as the entrypoint, which will just pass the arguments to falcoctl + 1.1s sleep.
+      cp $CRAFT_PROJECT_DIR/falcoctl-entrypoint.sh ${CRAFT_PART_INSTALL}/
