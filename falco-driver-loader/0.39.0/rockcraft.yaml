@@ -1,0 +1,143 @@
+# Copyright 2024 Canonical, Ltd.
+# See LICENSE file for licensing details
+
+# Based on the Falco 0.39.0 rockcraft.yaml file.
+name: falco-driver-loader
+summary: falco-driver-loader rock
+description: |
+    A rock containing the Falco driver loader.
+
+    Falco is a cloud native runtime security tool for Linux operating systems. It is designed
+    to detect and alert on abnormal behavior and potential security threats in real-time.
+
+    This rock closely resembles the Falco rock of the same version, the only difference being
+    the entrypoint and entrypoint script.
+license: Apache-2.0
+version: 0.39.0
+
+base: ubuntu@24.04
+build-base: ubuntu@24.04
+
+platforms:
+  amd64:
+  arm64:
+
+environment:
+  # https://github.com/falcosecurity/falco/blob/0.39.0/docker/falco/Dockerfile#L12-L16
+  VERSION_BUCKET: deb
+  FALCO_VERSION: 0.39.0
+  HOST_ROOT: /host
+  HOME: /root
+
+# Services to be loaded by the Pebble entrypoint.
+services:
+  entrypoint:
+    summary: "entrypoint service"
+    override: replace
+    startup: enabled
+    command: "/docker-entrypoint.sh [ --help ]"
+    on-success: shutdown
+    on-failure: shutdown
+
+entrypoint-service: entrypoint
+
+parts:
+  build-falco:
+    plugin: nil
+    source: https://github.com/falcosecurity/falco
+    source-type: git
+    source-tag: $CRAFT_PROJECT_VERSION
+    source-depth: 1
+    build-packages:
+      # https://falco.org/docs/developer-guide/source/
+      - git
+      - cmake
+      - clang
+      - build-essential
+      - linux-tools-common
+      - linux-tools-generic
+      - libelf-dev
+      - llvm
+      # On ubuntu-24.04, we have gcc 13, and abseil (grpc's dependency) fails to build with
+      # this version of gcc. Thus, we're building with gcc 12.
+      # xref: https://github.com/apache/arrow/issues/36969
+      - gcc-12
+      - g++-12
+    stage-packages:
+      # https://github.com/falcosecurity/falco/blob/0.39.0/docker/falco/Dockerfile#L20-L42
+      - bc
+      - bison
+      - ca-certificates
+      - clang
+      - curl
+      - dkms
+      - dwarves
+      - flex
+      - gcc
+      - gcc-11
+      - gnupg2
+      - jq
+      - libc6-dev
+      - libelf-dev
+      - libssl-dev
+      - llvm
+      - make
+      - netcat-openbsd
+      - patchelf
+      - xz-utils
+      - zstd
+    build-environment:
+      - GOOS: linux
+      - GOARCH: $CRAFT_ARCH_BUILD_FOR
+      - HOST_ROOT: /host
+    override-build: |
+      # Installing additional packages here because of the $(uname -r) part. We need that for
+      # build idempotency, so we can build locally *and* in the CI.
+      # linux-tools and linux-cloud-tools are required for building BPF (for x86_64).
+      if [ "$(uname -m)" == "x86_64" ]; then
+        apt install -y linux-headers-$(uname -r) linux-tools-$(uname -r) linux-cloud-tools-$(uname -r)
+      else
+        apt install -y linux-headers-$(uname -r) linux-tools-$(uname -r) linux-cloud-tools
+      fi
+
+      # https://falco.org/docs/developer-guide/source/
+      mkdir -p build
+      pushd build
+      # On ubuntu-24.04, we have gcc 13, and abseil (grpc's dependency) fails to build with
+      # this version of gcc. Thus, we're building with gcc 12.
+      # xref: https://github.com/apache/arrow/issues/36969
+      update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 12 --slave /usr/bin/g++ g++ /usr/bin/g++-12
+
+      # Based on: https://github.com/falcosecurity/falco/blob/0.39.0/.github/workflows/reusable_build_packages.yaml#L105
+      cmake -S .. \
+        -DUSE_BUNDLED_DEPS=On \
+        -DBUILD_BPF=On \
+        -DFALCO_ETC_DIR=/etc/falco \
+        -DBUILD_DRIVER=Off \
+        -DCREATE_TEST_TARGETS=Off
+      make falco -j6
+
+      # Generate the .deb file.
+      # make package will also generate the .tar.gz amd .rpm files, which we do not need,
+      # so we call cpack ourselves.
+      # make package depends on the preinstall target.
+      make preinstall
+      cpack --config ./CPackConfig.cmake -G DEB
+      popd
+
+      # Unpack the .deb into the install directory.
+      dpkg-deb --extract build/falco-*.deb ${CRAFT_PART_INSTALL}/
+
+      # Change the falco config within the container to enable ISO 8601 output.
+      # https://github.com/falcosecurity/falco/blob/0.39.0/docker/falco/Dockerfile#L52
+      sed -i -e 's/time_format_iso_8601: false/time_format_iso_8601: true/' ${CRAFT_PART_INSTALL}/etc/falco/falco.yaml
+
+      # https://github.com/falcosecurity/falco/blob/0.39.0/docker/falco/Dockerfile#L61
+      mkdir -p ${CRAFT_PART_INSTALL}/lib
+      ln -s $HOST_ROOT/lib/modules ${CRAFT_PART_INSTALL}/lib/modules
+
+      # The entrypoint script is different from the falco image.
+      # We do however need to apply a patch for Pebble's sake (it doesn't like it when
+      # processes end too suddenly)..
+      git apply -v $CRAFT_PROJECT_DIR/pebble-entrypoint.patch
+      cp docker/driver-loader/docker-entrypoint.sh ${CRAFT_PART_INSTALL}/
