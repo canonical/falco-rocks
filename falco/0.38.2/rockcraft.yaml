@@ -92,6 +92,15 @@ parts:
       # build idempotency, so we can build locally *and* in the CI.
       # linux-tools and linux-cloud-tools are required for building BPF (for x86_64).
       if [ "$(uname -m)" == "x86_64" ]; then
+        # In the GitHub action, we're using ubuntu 22.04 nodes, and LXD containers share its
+        # kernel. Due to the build-base set above, we don't have jammy's apt repositories set
+        # in the LXD container, and we need them to install the requirements below.
+        echo "deb http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse" | tee -a /etc/apt/sources.list
+        echo "deb http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted universe multiverse" | tee -a /etc/apt/sources.list
+        echo "deb http://archive.ubuntu.com/ubuntu/ jammy-backports main restricted universe multiverse" | tee -a /etc/apt/sources.list
+        echo "deb http://security.ubuntu.com/ubuntu jammy-security main restricted universe multiverse" | tee -a /etc/apt/sources.list
+        apt update
+
         apt install -y linux-headers-$(uname -r) linux-tools-$(uname -r) linux-cloud-tools-$(uname -r)
       else
         apt install -y linux-headers-$(uname -r) linux-tools-$(uname -r) linux-cloud-tools
