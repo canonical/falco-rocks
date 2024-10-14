@@ -44,11 +44,7 @@ def _get_falco_helm_cmd(falco_version: str):
     )
 
     driver_loader_rock = env_util.get_build_meta_info_for_rock_version(
-        "falco-driver-loader", image_version, "amd64"
-    )
-
-    driver_loader_rock = env_util.get_build_meta_info_for_rock_version(
-        "falco-driver-loader", image_version, "amd64"
+        "falco-driver-loader", falco_version, "amd64"
     )
 
     images = [
