@@ -34,6 +34,30 @@ def _get_event_generator_helm_cmd():
     )
 
 
+def _get_falcosidekick_helm_cmd():
+    falcosidekick_rock = env_util.get_build_meta_info_for_rock_version(
+        "falcosidekick", "2.29.0", "amd64"
+    )
+
+    images = [
+        k8s_util.HelmImage(falcosidekick_rock.image),
+    ]
+
+    set_configs = [
+        "webui.enabled=true",
+    ]
+
+    return k8s_util.get_helm_install_command(
+        "falcosidekick",
+        "falcosidekick",
+        namespace="falco",
+        repository="https://falcosecurity.github.io/charts",
+        images=images,
+        set_configs=set_configs,
+        split_image_registry=True,
+    )
+
+
 def _get_falco_helm_cmd(falco_version: str):
     falco_rock = env_util.get_build_meta_info_for_rock_version(
         "falco", falco_version, "amd64"
@@ -67,6 +91,33 @@ def _get_falco_helm_cmd(falco_version: str):
         set_configs=set_configs,
         split_image_registry=True,
     )
+
+
+def _assert_falcosidekick_up(instance: harness.Instance):
+    # Assert that falcosidekick is responsive. It has a ping method, to which we should get pong.
+    # The falcosidekick image does not have curl or wget, but the falco image does.
+    LOG.info("Checking if Falco detected irregularities.")
+    process = instance.exec(
+        [
+            "k8s",
+            "kubectl",
+            "--namespace",
+            "falco",
+            "exec",
+            f"{constants.K8S_DAEMONSET}/falco",
+            "--",
+            "curl",
+            "-s",
+            "http://falcosidekick:2801/ping",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert (
+        "pong" in process.stdout
+    ), "Expected falcosidekick to respond with pong to ping."
 
 
 def _assert_falco_logs(instance: harness.Instance):
@@ -116,11 +167,25 @@ def _assert_falco_logs(instance: harness.Instance):
 
 @pytest.mark.parametrize("image_version", ["0.38.2", "0.39.0"])
 def test_integration_falco(function_instance: harness.Instance, image_version):
+    # falcosidekick has readOnlyRootFilesystem=True, which means Pebble won't be able
+    # to copy its necessary files. This mutating webhook solves this issue by adding
+    # an emptydir volume to Pods for Pebble to use.
+    k8s_util.install_mutating_pebble_webhook(function_instance)
+
     # Deploy Falco helm chart and wait for it to become active.
     function_instance.exec(_get_falco_helm_cmd(image_version))
 
+    # Deploy falcosidekick helm chart and wait for it to become active.
+    function_instance.exec(_get_falcosidekick_helm_cmd())
+
     # Wait for the daemonset to become Active.
     k8s_util.wait_for_daemonset(function_instance, "falco", "falco", retry_times=10)
+
+    # Wait for the deployments to become Active.
+    for deployment in ["falcosidekick", "falcosidekick-ui"]:
+        k8s_util.wait_for_deployment(
+            function_instance, deployment, "falco", retry_times=10
+        )
 
     # Deploy event-generator for Falco and wait for it to become active.
     function_instance.exec(_get_event_generator_helm_cmd())
@@ -136,3 +201,4 @@ def test_integration_falco(function_instance: harness.Instance, image_version):
     )
 
     _assert_falco_logs(function_instance)
+    _assert_falcosidekick_up(function_instance)

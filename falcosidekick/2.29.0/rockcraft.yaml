@@ -28,11 +28,9 @@ services:
     startup: enabled
     # falcosidekick user and group is created, and the workdir is set in its home.
     # https://github.com/falcosecurity/falcosidekick/blob/2.29.0/Dockerfile#L14
-    command: "/home/falcosidekick/app/falcosidekick [ --help ]"
+    command: "/home/falcosidekick/app/falcosidekick"
     on-success: shutdown
     on-failure: shutdown
-
-entrypoint-service: falcosidekick
 
 parts:
   # https://github.com/falcosecurity/falcosidekick/blob/2.29.0/Dockerfile#L8
