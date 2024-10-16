@@ -34,6 +34,26 @@ def _get_event_generator_helm_cmd():
     )
 
 
+def _get_falco_exporter_helm_cmd(instance: harness.Instance):
+    falco_exporter_rock = env_util.get_build_meta_info_for_rock_version(
+        "falco-exporter", "0.8.7", "amd64"
+    )
+
+    images = [
+        k8s_util.HelmImage(falco_exporter_rock.image),
+    ]
+
+    return k8s_util.get_helm_install_command(
+        "falco-exporter",
+        "falco-exporter",
+        namespace="falco",
+        repository="https://falcosecurity.github.io/charts",
+        images=images,
+        runAsUser=0,
+        split_image_registry=True,
+    )
+
+
 def _get_falcosidekick_helm_cmd():
     falcosidekick_rock = env_util.get_build_meta_info_for_rock_version(
         "falcosidekick", "2.29.0", "amd64"
@@ -79,6 +99,10 @@ def _get_falco_helm_cmd(falco_version: str):
 
     set_configs = [
         "driver.kind=modern_ebpf",
+        # required for the falco-exporter.
+        # https://github.com/falcosecurity/charts/tree/master/charts/falco-exporter#falco-exporter-helm-chart
+        "falco.grpc.enabled=true",
+        "falco.grpc_output.enabled=true",
     ]
 
     return k8s_util.get_helm_install_command(
@@ -91,6 +115,33 @@ def _get_falco_helm_cmd(falco_version: str):
         set_configs=set_configs,
         split_image_registry=True,
     )
+
+
+def _assert_falco_exporter_up(instance: harness.Instance):
+    # Assert that falco-exporter is responsive. The falco-exporter image is a bare image,
+    # so, we're using the falco Pod to curl the falco-exporter endpoint instead.
+    LOG.info("Checking if falco-exporter is being responsive.")
+    process = instance.exec(
+        [
+            "k8s",
+            "kubectl",
+            "--namespace",
+            "falco",
+            "exec",
+            f"{constants.K8S_DAEMONSET}/falco",
+            "--",
+            "curl",
+            "-s",
+            "http://falco-exporter:9376/metrics",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert (
+        "Total number of scrapes" in process.stdout
+    ), "Expected falco-exporter to return metrics."
 
 
 def _assert_falcosidekick_up(instance: harness.Instance):
@@ -178,8 +229,14 @@ def test_integration_falco(function_instance: harness.Instance, image_version):
     # Deploy falcosidekick helm chart and wait for it to become active.
     function_instance.exec(_get_falcosidekick_helm_cmd())
 
-    # Wait for the daemonset to become Active.
-    k8s_util.wait_for_daemonset(function_instance, "falco", "falco", retry_times=10)
+    # Deploy falco-exporter helm chart and wait for it to become active.
+    function_instance.exec(_get_falco_exporter_helm_cmd(function_instance))
+
+    # Wait for the daemonsets to become Active.
+    for daemonset in ["falco", "falco-exporter"]:
+        k8s_util.wait_for_daemonset(
+            function_instance, daemonset, "falco", retry_times=10
+        )
 
     # Wait for the deployments to become Active.
     for deployment in ["falcosidekick", "falcosidekick-ui"]:
@@ -202,3 +259,4 @@ def test_integration_falco(function_instance: harness.Instance, image_version):
 
     _assert_falco_logs(function_instance)
     _assert_falcosidekick_up(function_instance)
+    _assert_falco_exporter_up(function_instance)
