@@ -59,8 +59,13 @@ def _get_falcosidekick_helm_cmd():
         "falcosidekick", "2.29.0", "amd64"
     )
 
+    falcosidekickui_rock = env_util.get_build_meta_info_for_rock_version(
+        "falcosidekick-ui", "2.2.0", "amd64"
+    )
+
     images = [
         k8s_util.HelmImage(falcosidekick_rock.image),
+        k8s_util.HelmImage(falcosidekickui_rock.image, "webui"),
     ]
 
     set_configs = [
