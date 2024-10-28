@@ -21,7 +21,7 @@ def test_falcosidekick_rock(image_version):
     image = rock.image
 
     # check rock filesystem.
-    docker_util.ensure_image_contains_paths(image, ROCK_EXPECTED_FILES)
+    docker_util.ensure_image_contains_paths_bare(image, ROCK_EXPECTED_FILES)
 
     # check binary.
     process = docker_util.run_in_docker(

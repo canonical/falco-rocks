@@ -10,7 +10,7 @@ description: |
 license: Apache-2.0
 version: 2.2.0
 
-base: ubuntu@24.04
+base: bare
 build-base: ubuntu@24.04
 run-user: _daemon_
 
@@ -44,9 +44,12 @@ parts:
   # https://github.com/falcosecurity/falcosidekick-ui/blob/v2.2.0/Dockerfile#L8
   falcosidekickui-user:
     plugin: nil
-    overlay-script: |
-      groupadd -R $CRAFT_OVERLAY --system falcosidekickui
-      useradd -R $CRAFT_OVERLAY --system -g falcosidekickui -u 1234 falcosidekickui
+    stage-packages:
+      - base-passwd_data
+      - base-files_base
+    override-build: |
+      groupadd -R $CRAFT_PART_INSTALL --system falcosidekickui
+      useradd -R $CRAFT_PART_INSTALL --system -g falcosidekickui -u 1234 falcosidekickui
 
   build-falcosidekick-ui:
     plugin: nil
