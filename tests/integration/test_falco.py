@@ -122,11 +122,10 @@ def _get_falco_helm_cmd(falco_version: str):
     )
 
 
-def _assert_falco_exporter_up(instance: harness.Instance):
-    # Assert that falco-exporter is responsive. The falco-exporter image is a bare image,
-    # so, we're using the falco Pod to curl the falco-exporter endpoint instead.
-    LOG.info("Checking if falco-exporter is being responsive.")
-    process = instance.exec(
+def _curl_service_via_falco(
+    instance: harness.Instance, svc_name: str, port: int, endpoint: str
+):
+    return instance.exec(
         [
             "k8s",
             "kubectl",
@@ -137,13 +136,19 @@ def _assert_falco_exporter_up(instance: harness.Instance):
             "--",
             "curl",
             "-s",
-            "http://falco-exporter:9376/metrics",
+            f"http://{svc_name}:{port}/{endpoint}",
         ],
         check=True,
         capture_output=True,
         text=True,
     )
 
+
+def _assert_falco_exporter_up(instance: harness.Instance):
+    # Assert that falco-exporter is responsive. The falco-exporter image is a bare image,
+    # so, we're using the falco Pod to curl the falco-exporter endpoint instead.
+    LOG.info("Checking if falco-exporter is being responsive.")
+    process = _curl_service_via_falco(instance, "falco-exporter", 9376, "metrics")
     assert (
         "Total number of scrapes" in process.stdout
     ), "Expected falco-exporter to return metrics."
@@ -152,28 +157,21 @@ def _assert_falco_exporter_up(instance: harness.Instance):
 def _assert_falcosidekick_up(instance: harness.Instance):
     # Assert that falcosidekick is responsive. It has a ping method, to which we should get pong.
     # The falcosidekick image does not have curl or wget, but the falco image does.
-    LOG.info("Checking if Falco detected irregularities.")
-    process = instance.exec(
-        [
-            "k8s",
-            "kubectl",
-            "--namespace",
-            "falco",
-            "exec",
-            f"{constants.K8S_DAEMONSET}/falco",
-            "--",
-            "curl",
-            "-s",
-            "http://falcosidekick:2801/ping",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
+    LOG.info("Checking if falcosidekick is being responsive.")
+    process = _curl_service_via_falco(instance, "falcosidekick", 2801, "ping")
     assert (
         "pong" in process.stdout
     ), "Expected falcosidekick to respond with pong to ping."
+
+
+def _assert_falcosidekick_ui_up(instance: harness.Instance):
+    # Assert that falcosidekick-ui is responsive.
+    # The falcosidekick-ui image does not have curl or wget, but the falco image does.
+    LOG.info("Checking if falcosidekick-ui is being responsive.")
+    process = _curl_service_via_falco(
+        instance, "falcosidekick-ui", 2802, "api/v1/healthz"
+    )
+    assert "ok" in process.stdout, "Expected falcosidekick-ui to respond with ok."
 
 
 def _assert_falco_logs(instance: harness.Instance):
@@ -264,4 +262,5 @@ def test_integration_falco(function_instance: harness.Instance, image_version):
 
     _assert_falco_logs(function_instance)
     _assert_falcosidekick_up(function_instance)
+    _assert_falcosidekick_ui_up(function_instance)
     _assert_falco_exporter_up(function_instance)
