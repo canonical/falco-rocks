@@ -619,9 +619,9 @@ pyjwt==2.12.1 \
     # via
     #   mcp
     #   semgrep
-python-dotenv==1.2.2 \
-    --hash=sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a \
-    --hash=sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3
+python-dotenv==1.2.3 \
+    --hash=sha256:904552145e8bfed22162c09dab1c2b9b54fefa7b23ba780f4f26ca0316b0f0d9 \
+    --hash=sha256:a20a594dabeaa385725aa239d5244871c143ecb356add8a20fcf23773a6c3a35
     # via pydantic-settings
 python-multipart==0.0.24 \
     --hash=sha256:9574c97e1c026e00bc30340ef7c7d76739512ab4dfd428fec8c330fa6a5cc3c8 \
